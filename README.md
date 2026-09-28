@@ -1,30 +1,29 @@
 # Pure Books 📚
 
-> A distraction-free, privacy-conscious interface and e-reader for your **Google Play Books** library. Part of the **Pure** ecosystem.
+> A clean, distraction-free catalog and showcase for your **Google Play Books** library. Part of the **Pure** ecosystem.
 
 ---
 
 ## Features
 
-- 📖 **Google Play Books Synchronization**: Connect via Google OAuth 2.0 (`https://www.googleapis.com/auth/books`) or paste an Access Token / API Key to sync your entire library, custom bookshelves, and reading history.
+- 📖 **Google Play Books Synchronization**: Connect via Google OAuth 2.0 (`https://www.googleapis.com/auth/books`) or paste an Access Token / API Key to sync your entire library, custom bookshelves, and reading collection.
 - 🗂️ **Bookshelves Organization**: Full support for Google Play Books shelves:
+  - **Purchased** (Shelf 1)
+  - **Favorites** (Shelf 0)
   - **Reading Now** (Shelf 3)
   - **To Read** (Shelf 2)
   - **Have Read** (Shelf 4)
-  - **Favorites** (Shelf 0)
-  - **Purchased** (Shelf 1)
   - **My eBooks / Uploads** (Shelf 7)
-  - Move books between shelves with automatic remote sync.
-- 🔍 **Google Books Catalog Discovery**: Search millions of books directly from the Google Books global catalog. Preview descriptions, cover art, page counts, and add them directly to your shelves with one click.
-- 🖥️ **Multi-Engine Reader**:
-  - **Google Books Embedded Viewer**: Directly embedded book canvas with page-turn controls, zoom, and table of contents powered by the official Google Books Viewer API.
-  - **Pure Distraction-Free Typography Reader**: Customizable font styles (Serif, Sans-Serif, Monospace), font size adjustment (14px–28px), line height, reading width margins, and built-in **Text-to-Speech (TTS)** narration.
-  - **Play Books Web Launcher**: 1-click bridge to the full Google Play Books web reader.
-- 📝 **Markdown Notes & Highlights**: Keep distraction-free notes, memorable quotes, and takeaways for every book in your collection.
-- ⏱️ **Reading Metrics & Progress**: Track your current page, reading percentage completion, estimated reading time, and total pages logged.
+- 🎛️ **Catalog Filtering & Sorting**:
+  - Live search across titles, authors, categories, and descriptions.
+  - Dynamic Category / Genre filter dropdown derived from your Google Books library.
+  - Multi-criteria sorting: Recently Added, Title (A-Z / Z-A), Author, Publication Year, Page Count, Rating.
+  - Grid View and List / Table View toggles.
+- 🔍 **Google Books Catalog Discovery**: Search millions of books directly from the Google Books global catalog and add them to your collection.
+- ↗️ **Direct Play Books Launching**: 1-click launch to open any book directly in Google Play Books on web, Android, iOS, or e-reader.
 - 🎨 **Pure Theme Engine**: Material 3 & Nord design tokens. Supports Nord Dark, Nord Light, Material Dark, Material Light, Warm Sepia, OLED Pitch Black, Dracula, Sunset Purple, and Solarized Dark.
 - 🌐 **Pure Hub Ready**: Seamlessly runs standalone on port `3004` (`/`) or reverse-proxied under Pure Hub at `/books/` with dynamic cross-window theme synchronization (`PURE_HUB_THEME_CHANGE`).
-- 💾 **Zero-Bloat Flat-File Storage**: Stores cached books, reading positions, and notes in an atomic, corruption-safe JSON file (`/data/library.json`). No SQL database required.
+- 💾 **Zero-Bloat Flat-File Storage**: Stores cached books and metadata in an atomic, corruption-safe JSON file (`/data/library.json`). No SQL database required.
 - 🔒 **Optional Password Gate**: Protect your library with `APP_PASSWORD`.
 - 📦 **1-Click Backup**: Full JSON export and import compatible with Google Takeout backups.
 

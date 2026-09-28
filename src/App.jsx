@@ -2,19 +2,18 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Header from './components/Header';
 import ShelfNav from './components/ShelfNav';
 import BookCard from './components/BookCard';
-import EmbeddedReader from './components/EmbeddedReader';
-import PureReader from './components/PureReader';
 import SearchModal from './components/SearchModal';
 import BookDetailsModal from './components/BookDetailsModal';
-import NotesModal from './components/NotesModal';
 import SettingsModal from './components/SettingsModal';
 import AuthModal from './components/AuthModal';
-import { BookOpen, Plus, Loader2, Sparkles, AlertCircle } from 'lucide-react';
+import { BookOpen, Plus, Loader2, RefreshCw, AlertCircle, Sparkles } from 'lucide-react';
 
 export default function App() {
   const [books, setBooks] = useState([]);
   const [bookshelves, setBookshelves] = useState([]);
-  const [activeShelf, setActiveShelf] = useState('reading-now');
+  const [activeShelf, setActiveShelf] = useState('all');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [sortBy, setSortBy] = useState('recent');
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('pure_books_view_mode') || 'grid');
   const [loading, setLoading] = useState(true);
@@ -26,11 +25,8 @@ export default function App() {
   // Google Status State
   const [googleStatus, setGoogleStatus] = useState(null);
 
-  // Active Reader / Modal States
-  const [embeddedReaderBook, setEmbeddedReaderBook] = useState(null);
-  const [pureReaderBook, setPureReaderBook] = useState(null);
+  // Modal States
   const [detailsBook, setDetailsBook] = useState(null);
-  const [notesBook, setNotesBook] = useState(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
@@ -201,7 +197,6 @@ export default function App() {
       const res = await apiFetch(`/auth/google/url?redirectUri=${encodeURIComponent(redirectUri)}`);
       if (res.ok) {
         const { url } = await res.json();
-        // Break out of iframe if embedded in Pure Hub so Google doesn't block the OAuth prompt
         if (window.top && window.top !== window.self) {
           window.top.location.href = url;
         } else {
@@ -228,17 +223,17 @@ export default function App() {
         await loadData();
       }
     } catch (err) {
-      console.error('Failed saving token:', err);
+      console.error('Failed saving manual token:', err);
     }
   };
 
   // Save OAuth credentials
-  const handleSaveCredentials = async (creds) => {
+  const handleSaveCredentials = async (clientId, clientSecret) => {
     try {
       const res = await apiFetch('/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(creds)
+        body: JSON.stringify({ clientId, clientSecret })
       });
       if (res.ok) {
         await loadData();
@@ -248,7 +243,7 @@ export default function App() {
     }
   };
 
-  // Disconnect Google Account
+  // Logout Google Account
   const handleLogoutGoogle = async () => {
     try {
       const res = await apiFetch('/auth/logout', { method: 'POST' });
@@ -256,58 +251,29 @@ export default function App() {
         await loadData();
       }
     } catch (err) {
-      console.error('Logout error:', err);
+      console.error('Failed logout:', err);
     }
   };
 
-  // Add Book
-  const handleAddBook = async (bookData) => {
+  // Add Book from Search
+  const handleAddBook = async (bookData, shelfSlug = 'purchased', shelfId = '1') => {
     try {
+      const shelfMapping = bookshelves.find(s => s.slug === shelfSlug || s.id === shelfId);
       const res = await apiFetch('/library', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(bookData)
+        body: JSON.stringify({
+          ...bookData,
+          shelf: shelfSlug,
+          shelfId,
+          shelfName: shelfMapping ? shelfMapping.title : 'My Books'
+        })
       });
       if (res.ok) {
-        const saved = await res.json();
-        setBooks((prev) => [saved, ...prev.filter(b => b.id !== saved.id)]);
-        // Reload shelves
-        const sRes = await apiFetch('/bookshelves');
-        if (sRes.ok) {
-          const sData = await sRes.json();
-          setBookshelves(sData.bookshelves || []);
-        }
+        await loadData();
       }
     } catch (err) {
       console.error('Failed adding book:', err);
-    }
-  };
-
-  // Update Shelf
-  const handleUpdateShelf = async (bookId, shelfSlug, shelfId, shelfName) => {
-    try {
-      const updates = { shelf: shelfSlug, shelfId, shelfName };
-      if (shelfSlug === 'have-read') {
-        updates.progress = 100;
-      }
-      const res = await apiFetch(`/library/${bookId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates)
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setBooks((prev) => prev.map(b => b.id === bookId ? { ...b, ...updated } : b));
-        if (detailsBook?.id === bookId) setDetailsBook(updated);
-        // Refresh shelves count
-        const sRes = await apiFetch('/bookshelves');
-        if (sRes.ok) {
-          const sData = await sRes.json();
-          setBookshelves(sData.bookshelves || []);
-        }
-      }
-    } catch (err) {
-      console.error('Failed updating shelf:', err);
     }
   };
 
@@ -315,70 +281,31 @@ export default function App() {
   const handleToggleFavorite = async (bookId) => {
     const book = books.find(b => b.id === bookId);
     if (!book) return;
-
+    const newFavorite = !book.favorite;
     try {
       const res = await apiFetch(`/library/${bookId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ favorite: !book.favorite })
+        body: JSON.stringify({ favorite: newFavorite })
       });
       if (res.ok) {
-        const updated = await res.json();
-        setBooks((prev) => prev.map(b => b.id === bookId ? { ...b, ...updated } : b));
-        if (detailsBook?.id === bookId) setDetailsBook(updated);
+        setBooks((prev) => prev.map(b => b.id === bookId ? { ...b, favorite: newFavorite } : b));
+        if (detailsBook?.id === bookId) {
+          setDetailsBook(prev => ({ ...prev, favorite: newFavorite }));
+        }
       }
     } catch (err) {
       console.error('Failed toggling favorite:', err);
     }
   };
 
-  // Update Reading Progress
-  const handleUpdateProgress = async (bookId, progress, currentPage) => {
-    try {
-      const res = await apiFetch(`/volumes/${bookId}/readingPosition`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ progress, currentPage })
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setBooks((prev) => prev.map(b => b.id === bookId ? { ...b, ...updated } : b));
-        if (detailsBook?.id === bookId) setDetailsBook(updated);
-        if (embeddedReaderBook?.id === bookId) setEmbeddedReaderBook(prev => ({ ...prev, ...updated }));
-        if (pureReaderBook?.id === bookId) setPureReaderBook(prev => ({ ...prev, ...updated }));
-      }
-    } catch (err) {
-      console.error('Failed updating reading progress:', err);
-    }
-  };
-
-  // Save Book Notes
-  const handleSaveNotes = async (bookId, userNotes) => {
-    try {
-      const res = await apiFetch(`/library/${bookId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userNotes })
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setBooks((prev) => prev.map(b => b.id === bookId ? { ...b, ...updated } : b));
-        if (notesBook?.id === bookId) setNotesBook(updated);
-        if (detailsBook?.id === bookId) setDetailsBook(updated);
-      }
-    } catch (err) {
-      console.error('Failed saving notes:', err);
-    }
-  };
-
-  // Delete Book
+  // Delete Book from View
   const handleDeleteBook = async (bookId) => {
     try {
       const res = await apiFetch(`/library/${bookId}`, { method: 'DELETE' });
       if (res.ok) {
         setBooks((prev) => prev.filter(b => b.id !== bookId));
         if (detailsBook?.id === bookId) setDetailsBook(null);
-        if (notesBook?.id === bookId) setNotesBook(null);
         // Refresh shelves
         const sRes = await apiFetch('/bookshelves');
         if (sRes.ok) {
@@ -391,20 +318,45 @@ export default function App() {
     }
   };
 
-  // Filtered Books Memo
+  // Extract Unique Categories with Book Counts
+  const categories = useMemo(() => {
+    const counts = {};
+    books.forEach(b => {
+      if (Array.isArray(b.categories)) {
+        b.categories.forEach(c => {
+          const clean = c.trim();
+          if (clean) counts[clean] = (counts[clean] || 0) + 1;
+        });
+      }
+    });
+    return Object.entries(counts)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [books]);
+
+  // Filtered & Sorted Books
   const filteredBooks = useMemo(() => {
-    return books.filter((book) => {
-      // Shelf Filter
+    // 1. Filter
+    const result = books.filter((book) => {
+      // Bookshelf Filter
       let matchesShelf = true;
       if (activeShelf === 'all') {
         matchesShelf = true;
       } else if (activeShelf === 'favorites') {
-        matchesShelf = book.favorite || book.shelf === 'favorites' || book.shelfId === '0';
+        matchesShelf = book.favorite || book.shelf === 'favorites' || book.shelfId === '0' ||
+          (Array.isArray(book.shelves) && book.shelves.some(s => s.id === '0' || s.slug === 'favorites'));
       } else {
-        matchesShelf = book.shelf === activeShelf || book.shelfId === activeShelf;
+        matchesShelf = book.shelf === activeShelf || book.shelfId === activeShelf ||
+          (Array.isArray(book.shelves) && book.shelves.some(s => s.id === activeShelf || s.slug === activeShelf));
       }
 
       if (!matchesShelf) return false;
+
+      // Category Filter
+      if (selectedCategory !== 'all') {
+        const hasCategory = Array.isArray(book.categories) && book.categories.includes(selectedCategory);
+        if (!hasCategory) return false;
+      }
 
       // Query Search Filter
       if (!searchQuery.trim()) return true;
@@ -412,12 +364,37 @@ export default function App() {
       const inTitle = book.title?.toLowerCase().includes(q);
       const inAuthors = book.authors?.some(a => a.toLowerCase().includes(q));
       const inCategories = book.categories?.some(c => c.toLowerCase().includes(q));
-      const inNotes = book.userNotes?.toLowerCase().includes(q);
+      const inPublisher = book.publisher?.toLowerCase().includes(q);
       const inDesc = book.description?.toLowerCase().includes(q);
 
-      return inTitle || inAuthors || inCategories || inNotes || inDesc;
+      return inTitle || inAuthors || inCategories || inPublisher || inDesc;
     });
-  }, [books, activeShelf, searchQuery]);
+
+    // 2. Sort
+    result.sort((a, b) => {
+      switch (sortBy) {
+        case 'title-asc':
+          return (a.title || '').localeCompare(b.title || '');
+        case 'title-desc':
+          return (b.title || '').localeCompare(a.title || '');
+        case 'author-asc':
+          return ((a.authors && a.authors[0]) || '').localeCompare((b.authors && b.authors[0]) || '');
+        case 'year-desc':
+          return (b.publishedDate || '').localeCompare(a.publishedDate || '');
+        case 'year-asc':
+          return (a.publishedDate || '').localeCompare(b.publishedDate || '');
+        case 'pages-desc':
+          return (b.pageCount || 0) - (a.pageCount || 0);
+        case 'rating-desc':
+          return (b.averageRating || 0) - (a.averageRating || 0);
+        case 'recent':
+        default:
+          return (b.addedAt || '').localeCompare(a.addedAt || '');
+      }
+    });
+
+    return result;
+  }, [books, activeShelf, selectedCategory, searchQuery, sortBy]);
 
   return (
     <div className="h-screen w-full flex flex-col bg-surface text-on-surface antialiased transition-colors duration-200 overflow-hidden">
@@ -436,12 +413,18 @@ export default function App() {
         totalBooksCount={books.length}
       />
 
-      {/* Bookshelf Tabs & Stats Bar */}
+      {/* Bookshelf Tabs, Category Filter & Sorter */}
       <ShelfNav
         shelves={bookshelves}
         activeShelf={activeShelf}
         onSelectShelf={setActiveShelf}
-        books={books}
+        categories={categories}
+        selectedCategory={selectedCategory}
+        onSelectCategory={setSelectedCategory}
+        sortBy={sortBy}
+        onSelectSort={setSortBy}
+        totalBooks={books.length}
+        filteredCount={filteredBooks.length}
       />
 
       {/* Main Content Area */}
@@ -449,7 +432,34 @@ export default function App() {
         {loading ? (
           <div className="flex flex-col items-center justify-center py-24 text-on-surface-variant">
             <Loader2 className="w-8 h-8 animate-spin text-primary mb-3" />
-            <p className="text-sm font-medium">Loading your Google Play Books library...</p>
+            <p className="text-sm font-medium">Loading your Google Play Books...</p>
+          </div>
+        ) : !googleStatus?.authenticated && books.length === 0 ? (
+          /* Empty State: Google Account Not Connected */
+          <div className="flex flex-col items-center justify-center py-16 px-4 text-center max-w-lg mx-auto">
+            <div className="w-16 h-16 rounded-2xl bg-primary-container text-primary flex items-center justify-center mb-5 shadow-sm">
+              <BookOpen className="w-8 h-8" />
+            </div>
+            <h2 className="text-xl font-bold text-on-surface mb-2">
+              Connect Google Play Books
+            </h2>
+            <p className="text-xs sm:text-sm text-on-surface-variant leading-relaxed mb-6">
+              Pure Books is designed to showcase your personal Google Play Books library. Connect your Google account to instantly view and browse all your purchased books, custom shelves, and reading collection.
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <button
+                onClick={handleConnectGoogle}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold bg-primary text-on-primary hover:opacity-90 transition-opacity shadow-sm cursor-pointer"
+              >
+                <span>Connect with Google</span>
+              </button>
+              <button
+                onClick={() => setIsSettingsOpen(true)}
+                className="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium bg-surface-container border border-outline hover:bg-surface-container-high transition-colors cursor-pointer"
+              >
+                Settings
+              </button>
+            </div>
           </div>
         ) : filteredBooks.length > 0 ? (
           <div
@@ -464,43 +474,49 @@ export default function App() {
                 key={book.id}
                 book={book}
                 viewMode={viewMode}
-                onOpenReader={(b) => setEmbeddedReaderBook(b)}
-                onOpenPureReader={(b) => setPureReaderBook(b)}
-                onOpenNotes={(b) => setNotesBook(b)}
                 onOpenDetails={(b) => setDetailsBook(b)}
-                onUpdateShelf={handleUpdateShelf}
                 onToggleFavorite={handleToggleFavorite}
                 onDeleteBook={handleDeleteBook}
               />
             ))}
           </div>
         ) : (
+          /* Empty Filter State */
           <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
             <div className="w-16 h-16 rounded-2xl bg-surface-container-high border border-outline flex items-center justify-center text-primary mb-4 shadow-sm">
               <BookOpen className="w-8 h-8 opacity-60" />
             </div>
             <h3 className="text-base font-semibold text-on-surface mb-1">
-              No books in this view
+              No books found
             </h3>
             <p className="text-xs text-on-surface-variant max-w-sm mb-5">
               {searchQuery
-                ? `No books found matching "${searchQuery}". Try a different keyword.`
-                : `Your "${activeShelf}" shelf is currently empty.`}
+                ? `No books match "${searchQuery}".`
+                : selectedCategory !== 'all'
+                ? `No books found under category "${selectedCategory}".`
+                : `Your "${activeShelf}" shelf currently has no volumes.`}
             </p>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setIsSearchOpen(true)}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-primary text-on-primary hover:opacity-90 transition-opacity cursor-pointer shadow-xs"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Search Google Books</span>
-              </button>
-              {searchQuery && (
+              {(searchQuery || selectedCategory !== 'all' || activeShelf !== 'all') && (
                 <button
-                  onClick={() => setSearchQuery('')}
-                  className="px-3 py-2 rounded-xl text-xs font-medium bg-surface-container border border-outline hover:bg-surface-container-high transition-colors"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setSelectedCategory('all');
+                    setActiveShelf('all');
+                  }}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-primary text-on-primary hover:opacity-90 transition-opacity cursor-pointer shadow-xs"
                 >
-                  Clear Filter
+                  Clear Filters
+                </button>
+              )}
+              {googleStatus?.authenticated && (
+                <button
+                  onClick={handleSync}
+                  disabled={isSyncing}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-surface-container border border-outline hover:bg-surface-container-high transition-colors cursor-pointer"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-primary' : ''}`} />
+                  <span>Sync from Google</span>
                 </button>
               )}
             </div>
@@ -508,33 +524,16 @@ export default function App() {
         )}
       </main>
 
-      {/* Reader 1: Google Books Embedded Viewer */}
-      {embeddedReaderBook && (
-        <EmbeddedReader
-          book={embeddedReaderBook}
-          onClose={() => setEmbeddedReaderBook(null)}
-          onSwitchToPureReader={() => {
-            setPureReaderBook(embeddedReaderBook);
-            setEmbeddedReaderBook(null);
-          }}
-          onUpdateProgress={handleUpdateProgress}
-        />
-      )}
+      {/* Modal: Book Details & Google Play Link */}
+      <BookDetailsModal
+        book={detailsBook}
+        isOpen={Boolean(detailsBook)}
+        onClose={() => setDetailsBook(null)}
+        onToggleFavorite={handleToggleFavorite}
+        onDeleteBook={handleDeleteBook}
+      />
 
-      {/* Reader 2: Pure Typography Distraction-Free Reader */}
-      {pureReaderBook && (
-        <PureReader
-          book={pureReaderBook}
-          onClose={() => setPureReaderBook(null)}
-          onSwitchToGoogleViewer={() => {
-            setEmbeddedReaderBook(pureReaderBook);
-            setPureReaderBook(null);
-          }}
-          onUpdateProgress={handleUpdateProgress}
-        />
-      )}
-
-      {/* Modal: Google Books Catalog Search */}
+      {/* Modal: Search Google Play Books */}
       <SearchModal
         isOpen={isSearchOpen}
         onClose={() => setIsSearchOpen(false)}
@@ -543,29 +542,7 @@ export default function App() {
         apiBase={apiBase}
       />
 
-      {/* Modal: Book Details & Page Logger */}
-      <BookDetailsModal
-        book={detailsBook}
-        isOpen={Boolean(detailsBook)}
-        onClose={() => setDetailsBook(null)}
-        onOpenReader={(b) => setEmbeddedReaderBook(b)}
-        onOpenPureReader={(b) => setPureReaderBook(b)}
-        onOpenNotes={(b) => setNotesBook(b)}
-        onUpdateShelf={handleUpdateShelf}
-        onToggleFavorite={handleToggleFavorite}
-        onUpdateProgress={handleUpdateProgress}
-        onDeleteBook={handleDeleteBook}
-      />
-
-      {/* Modal: Book Notes & Highlights */}
-      <NotesModal
-        book={notesBook}
-        isOpen={Boolean(notesBook)}
-        onClose={() => setNotesBook(null)}
-        onSaveNotes={handleSaveNotes}
-      />
-
-      {/* Modal: Settings & Google OAuth */}
+      {/* Modal: Settings & Google Account */}
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}

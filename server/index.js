@@ -178,7 +178,11 @@ app.get(['/api/bookshelves', '/books/api/bookshelves'], requireAuth, async (req,
       if (shelf.id === 'all') {
         count = books.length;
       } else {
-        count = books.filter(b => b.shelfId === shelf.id || b.shelf === shelf.slug).length;
+        count = books.filter(b => 
+          b.shelfId === shelf.id || 
+          b.shelf === shelf.slug || 
+          (Array.isArray(b.shelves) && b.shelves.some(s => s.id === shelf.id || s.slug === shelf.slug))
+        ).length;
       }
 
       // Check if remote shelf exists
@@ -212,43 +216,52 @@ app.post(['/api/sync', '/books/api/sync'], requireAuth, async (req, res) => {
     const remoteShelvesRes = await googleBooks.listBookshelves();
     const remoteShelves = remoteShelvesRes?.items || [];
     let importedCount = 0;
-    const currentLibrary = await readLibrary();
 
     for (const shelf of remoteShelves) {
       if (shelf.volumeCount > 0) {
         try {
-          const volumesRes = await googleBooks.getShelfVolumes(shelf.id, 40, 0);
-          const items = volumesRes?.items || [];
-          
-          for (const item of items) {
-            const vi = item.volumeInfo || {};
-            const shelfMapping = DEFAULT_BOOKSHELVES.find(s => s.id === String(shelf.id));
-            const shelfSlug = shelfMapping ? shelfMapping.slug : 'to-read';
+          let startIndex = 0;
+          const pageSize = 40;
+          while (true) {
+            const volumesRes = await googleBooks.getShelfVolumes(shelf.id, pageSize, startIndex);
+            const items = volumesRes?.items || [];
+            if (items.length === 0) break;
 
-            const bookData = {
-              id: item.id,
-              title: vi.title || 'Untitled',
-              subtitle: vi.subtitle || '',
-              authors: vi.authors || ['Unknown Author'],
-              publisher: vi.publisher || '',
-              publishedDate: vi.publishedDate || '',
-              description: vi.description || '',
-              pageCount: vi.pageCount || 0,
-              categories: vi.categories || [],
-              averageRating: vi.averageRating || null,
-              ratingsCount: vi.ratingsCount || null,
-              shelf: shelfSlug,
-              shelfId: String(shelf.id),
-              shelfName: shelf.title,
-              imageLinks: vi.imageLinks || {},
-              previewLink: vi.previewLink || '',
-              webReaderLink: item.accessInfo?.webReaderLink || `http://play.google.com/books/reader?id=${item.id}`,
-              canonicalVolumeLink: vi.canonicalVolumeLink || `https://play.google.com/store/books/details?id=${item.id}`,
-              accessInfo: item.accessInfo || {}
-            };
+            for (const item of items) {
+              const vi = item.volumeInfo || {};
+              const shelfMapping = DEFAULT_BOOKSHELVES.find(s => s.id === String(shelf.id));
+              const shelfSlug = shelfMapping ? shelfMapping.slug : 'purchased';
 
-            await addBook(bookData);
-            importedCount++;
+              const bookData = {
+                id: item.id,
+                title: vi.title || 'Untitled',
+                subtitle: vi.subtitle || '',
+                authors: vi.authors || ['Unknown Author'],
+                publisher: vi.publisher || '',
+                publishedDate: vi.publishedDate || '',
+                description: vi.description || '',
+                pageCount: vi.pageCount || 0,
+                categories: vi.categories || [],
+                averageRating: vi.averageRating || null,
+                ratingsCount: vi.ratingsCount || null,
+                shelf: shelfSlug,
+                shelfId: String(shelf.id),
+                shelfName: shelf.title,
+                imageLinks: vi.imageLinks || {},
+                previewLink: vi.previewLink || '',
+                webReaderLink: item.accessInfo?.webReaderLink || `https://play.google.com/books/reader?id=${item.id}`,
+                canonicalVolumeLink: vi.canonicalVolumeLink || `https://play.google.com/store/books/details?id=${item.id}`,
+                accessInfo: item.accessInfo || {}
+              };
+
+              await addBook(bookData);
+              importedCount++;
+            }
+
+            startIndex += items.length;
+            if (startIndex >= (volumesRes.totalItems || 0) || items.length < pageSize) {
+              break;
+            }
           }
         } catch (shelfErr) {
           console.warn(`[Pure-Books] Failed syncing shelf ${shelf.title}:`, shelfErr.message);

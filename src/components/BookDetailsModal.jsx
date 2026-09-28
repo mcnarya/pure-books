@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   X,
   BookOpen,
@@ -8,8 +8,8 @@ import {
   Building,
   Layers,
   Trash2,
-  Check,
-  FileText
+  Tag,
+  Globe
 } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
@@ -18,43 +18,26 @@ export default function BookDetailsModal({
   book,
   isOpen,
   onClose,
-  onOpenReader,
-  onOpenPureReader,
-  onOpenNotes,
-  onUpdateShelf,
   onToggleFavorite,
-  onUpdateProgress,
   onDeleteBook
 }) {
   if (!isOpen || !book) return null;
 
-  const [currentPageInput, setCurrentPageInput] = useState(book.currentPage || 0);
-  const thumbnail = book.imageLinks?.thumbnail || book.imageLinks?.smallThumbnail;
+  const rawThumbnail = book.imageLinks?.thumbnail || book.imageLinks?.smallThumbnail;
+  const thumbnail = rawThumbnail ? rawThumbnail.replace('&edge=curl', '').replace('zoom=5', 'zoom=1') : null;
   const pageCount = book.pageCount || 0;
-
-  const shelvesList = [
-    { slug: 'reading-now', id: '3', label: 'Reading Now' },
-    { slug: 'to-read', id: '2', label: 'To Read' },
-    { slug: 'have-read', id: '4', label: 'Have Read' },
-    { slug: 'favorites', id: '0', label: 'Favorites' }
-  ];
-
-  const handleSaveProgress = (e) => {
-    e.preventDefault();
-    const page = Math.max(0, Math.min(pageCount || 99999, Number(currentPageInput) || 0));
-    const pct = pageCount > 0 ? Math.round((page / pageCount) * 100) : 0;
-    onUpdateProgress(book.id, pct, page);
-  };
+  const playBooksReaderUrl = book.webReaderLink || `https://play.google.com/books/reader?id=${book.id}`;
+  const storeUrl = book.canonicalVolumeLink || `https://play.google.com/store/books/details?id=${book.id}`;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-xs animate-in fade-in duration-150">
       <div className="w-full max-w-2xl max-h-[88vh] flex flex-col bg-surface-container border border-outline rounded-2xl shadow-2xl overflow-hidden">
         
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-outline">
+        {/* Modal Header */}
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary-container text-primary">
-              {book.shelfName || 'Google Play Book'}
+            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-primary-container text-primary">
+              {book.shelfName || book.shelf || 'Google Play Book'}
             </span>
             {book.favorite && (
               <span className="flex items-center gap-1 text-xs text-amber-400 font-medium">
@@ -76,16 +59,16 @@ export default function BookDetailsModal({
           
           {/* Top Info section */}
           <div className="flex flex-col sm:flex-row gap-5 items-center sm:items-start text-center sm:text-left">
-            <div className="w-32 h-44 shrink-0 rounded-xl overflow-hidden bg-surface-container-high border border-outline shadow-md flex items-center justify-center">
+            <div className="w-32 h-46 shrink-0 rounded-xl overflow-hidden bg-surface-container-high border border-outline shadow-md flex items-center justify-center p-1.5">
               {thumbnail ? (
-                <img src={thumbnail} alt={book.title} className="w-full h-full object-cover" />
+                <img src={thumbnail} alt={book.title} className="w-full h-full object-contain" />
               ) : (
                 <BookOpen className="w-10 h-10 text-on-surface-variant/40" />
               )}
             </div>
 
             <div className="flex-1 min-w-0">
-              <h2 className="text-xl sm:text-2xl font-bold text-on-surface tracking-tight">
+              <h2 className="text-xl sm:text-2xl font-bold text-on-surface tracking-tight leading-snug">
                 {book.title}
               </h2>
               {book.subtitle && (
@@ -97,135 +80,128 @@ export default function BookDetailsModal({
                 By {book.authors?.join(', ') || 'Unknown Author'}
               </p>
 
-              {/* Badges / Meta */}
-              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mt-3">
-                {book.categories?.map((cat, i) => (
-                  <span
-                    key={i}
-                    className="px-2 py-0.5 rounded text-[11px] font-medium bg-surface-container-high text-on-surface-variant border border-outline"
-                  >
-                    {cat}
+              {/* Meta Badges */}
+              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2.5 mt-3 text-xs text-on-surface-variant">
+                {book.averageRating ? (
+                  <span className="flex items-center gap-1 text-amber-400 font-semibold">
+                    <Star className="w-3.5 h-3.5 fill-amber-400" />
+                    <span>{book.averageRating}</span>
+                    {book.ratingsCount ? <span className="text-on-surface-variant/70 text-[11px]">({book.ratingsCount})</span> : null}
                   </span>
-                ))}
+                ) : null}
+
+                {book.publishedDate && (
+                  <span className="flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5" />
+                    {book.publishedDate}
+                  </span>
+                )}
+
+                {pageCount > 0 && (
+                  <span className="flex items-center gap-1">
+                    <Layers className="w-3.5 h-3.5" />
+                    {pageCount} pages
+                  </span>
+                )}
+
+                {book.publisher && (
+                  <span className="flex items-center gap-1 truncate max-w-[200px]">
+                    <Building className="w-3.5 h-3.5" />
+                    {book.publisher}
+                  </span>
+                )}
               </div>
 
-              {/* Progress Bar */}
-              <div className="mt-4 pt-3 border-t border-outline/60">
-                <div className="flex items-center justify-between text-xs text-on-surface-variant mb-1">
-                  <span>Reading Progress</span>
-                  <span className="font-semibold text-primary">{book.progress || 0}%</span>
+              {/* Category Tags */}
+              {Array.isArray(book.categories) && book.categories.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-3 justify-center sm:justify-start">
+                  {book.categories.map((cat, idx) => (
+                    <span
+                      key={idx}
+                      className="px-2 py-0.5 rounded-full text-[11px] bg-surface-container-high text-on-surface-variant border border-outline/70"
+                    >
+                      {cat}
+                    </span>
+                  ))}
                 </div>
-                <div className="h-2 rounded-full bg-surface-container-high overflow-hidden">
-                  <div
-                    className="h-full bg-primary transition-all duration-300"
-                    style={{ width: `${book.progress || 0}%` }}
-                  />
-                </div>
-              </div>
+              )}
             </div>
           </div>
 
-          {/* Quick Action Buttons */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <button
-              onClick={() => { onClose(); onOpenReader(book); }}
-              className="py-2 px-3 rounded-xl text-xs font-semibold bg-primary text-on-primary hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
-            >
-              <BookOpen className="w-4 h-4" />
-              <span>Read (Google)</span>
-            </button>
+          {/* Primary Action Banner */}
+          <div className="p-4 rounded-xl bg-surface/70 border border-outline flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div>
+              <div className="font-semibold text-sm text-on-surface">
+                Ready to read?
+              </div>
+              <p className="text-xs text-on-surface-variant mt-0.5">
+                Open directly in Google Play Books on web, phone, tablet, or e-reader.
+              </p>
+            </div>
 
-            <button
-              onClick={() => { onClose(); onOpenPureReader(book); }}
-              className="py-2 px-3 rounded-xl text-xs font-semibold bg-surface-container-high hover:bg-surface-container border border-outline text-on-surface transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-            >
-              <BookOpen className="w-4 h-4 text-primary" />
-              <span>Pure Reader</span>
-            </button>
-
-            <button
-              onClick={() => { onClose(); onOpenNotes(book); }}
-              className="py-2 px-3 rounded-xl text-xs font-semibold bg-surface-container-high hover:bg-surface-container border border-outline text-on-surface transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-            >
-              <FileText className="w-4 h-4 text-on-surface-variant" />
-              <span>Notes</span>
-            </button>
-
-            {book.webReaderLink ? (
+            <div className="flex items-center gap-2 w-full sm:w-auto">
               <a
-                href={book.webReaderLink}
+                href={playBooksReaderUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="py-2 px-3 rounded-xl text-xs font-semibold bg-surface-container-high hover:bg-surface-container border border-outline text-on-surface transition-colors flex items-center justify-center gap-1.5"
+                className="flex-1 sm:flex-initial py-2 px-4 rounded-xl text-xs font-semibold bg-primary text-on-primary hover:opacity-90 transition-opacity flex items-center justify-center gap-2 shadow-xs cursor-pointer"
               >
-                <ExternalLink className="w-4 h-4 text-on-surface-variant" />
-                <span>Play Books</span>
+                <span>Open in Google Play Books</span>
+                <ExternalLink className="w-3.5 h-3.5" />
               </a>
-            ) : (
-              <div />
-            )}
-          </div>
 
-          {/* Manage Shelf & Page Logger */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-xl bg-surface/60 border border-outline text-xs">
-            <div>
-              <label className="font-semibold text-on-surface block mb-1.5">Bookshelf</label>
-              <div className="flex flex-wrap gap-1.5">
-                {shelvesList.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => onUpdateShelf(book.id, s.slug, s.id, s.label)}
-                    className={`px-2.5 py-1 rounded-lg border text-xs transition-colors cursor-pointer ${
-                      book.shelf === s.slug || book.shelfId === s.id
-                        ? 'bg-primary text-on-primary border-primary font-medium'
-                        : 'bg-surface-container border-outline text-on-surface hover:bg-surface-container-high'
-                    }`}
-                  >
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="font-semibold text-on-surface block mb-1.5">Log Current Page</label>
-              <form onSubmit={handleSaveProgress} className="flex items-center gap-2">
-                <input
-                  type="number"
-                  min="0"
-                  max={pageCount || 99999}
-                  value={currentPageInput}
-                  onChange={(e) => setCurrentPageInput(e.target.value)}
-                  className="w-24 px-2.5 py-1 text-xs rounded-lg bg-surface border border-outline text-on-surface focus:outline-hidden focus:ring-1 focus:ring-primary"
-                />
-                <span className="text-on-surface-variant">of {pageCount || '—'}</span>
-                <button
-                  type="submit"
-                  className="px-2.5 py-1 rounded-lg bg-surface-container-high border border-outline hover:bg-surface-container text-on-surface font-medium cursor-pointer"
+              {storeUrl && (
+                <a
+                  href={storeUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="py-2 px-3 rounded-xl text-xs font-medium bg-surface-container-high hover:bg-surface-container border border-outline text-on-surface transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                  title="View Store Listing"
                 >
-                  Save
-                </button>
-              </form>
+                  <Globe className="w-3.5 h-3.5" />
+                  <span>Store</span>
+                </a>
+              )}
             </div>
           </div>
 
           {/* Description Section */}
           <div>
-            <h3 className="text-sm font-bold text-on-surface mb-2">Description</h3>
+            <h3 className="text-sm font-bold text-on-surface mb-2">Description & Synopsis</h3>
             <div
-              className="text-xs text-on-surface-variant leading-relaxed space-y-2"
+              className="text-xs sm:text-sm text-on-surface-variant leading-relaxed space-y-2 max-h-60 overflow-y-auto pr-2"
               dangerouslySetInnerHTML={{
-                __html: DOMPurify.sanitize(marked.parse(book.description || '*No description provided.*'))
+                __html: DOMPurify.sanitize(marked.parse(book.description || '*No description provided by Google Books.*'))
               }}
             />
           </div>
 
-          {/* Publishing Metadata */}
-          <div className="pt-4 border-t border-outline/70 grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs text-on-surface-variant">
+          {/* Bookshelf Associations */}
+          {Array.isArray(book.shelves) && book.shelves.length > 0 && (
+            <div className="p-3.5 rounded-xl bg-surface/60 border border-outline">
+              <div className="text-xs font-semibold text-on-surface mb-2 flex items-center gap-1.5">
+                <Tag className="w-3.5 h-3.5 text-primary" />
+                <span>Google Bookshelves</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {book.shelves.map((s, idx) => (
+                  <span
+                    key={idx}
+                    className="px-2.5 py-1 rounded-lg text-xs bg-surface-container border border-outline text-on-surface"
+                  >
+                    {s.name || s.title || s.slug}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Publishing & Identification Metadata */}
+          <div className="pt-4 border-t border-outline/70 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs text-on-surface-variant">
             {book.publisher && (
               <div>
                 <span className="block font-medium text-on-surface">Publisher</span>
-                <span>{book.publisher}</span>
+                <span className="truncate block">{book.publisher}</span>
               </div>
             )}
             {book.publishedDate && (
@@ -236,17 +212,31 @@ export default function BookDetailsModal({
             )}
             {pageCount > 0 && (
               <div>
-                <span className="block font-medium text-on-surface">Print Length</span>
+                <span className="block font-medium text-on-surface">Length</span>
                 <span>{pageCount} pages</span>
+              </div>
+            )}
+            {book.id && (
+              <div>
+                <span className="block font-medium text-on-surface">Volume ID</span>
+                <span className="font-mono text-[11px] truncate block">{book.id}</span>
               </div>
             )}
           </div>
 
-          {/* Danger Zone: Delete Book */}
-          <div className="pt-4 border-t border-outline flex justify-end">
+          {/* Action Row: Favorite & Remove */}
+          <div className="pt-4 border-t border-outline flex items-center justify-between">
+            <button
+              onClick={() => onToggleFavorite(book.id)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-on-surface hover:bg-surface-container border border-outline transition-colors cursor-pointer"
+            >
+              <Star className={`w-3.5 h-3.5 ${book.favorite ? 'fill-amber-400 text-amber-400' : ''}`} />
+              <span>{book.favorite ? 'Favorited' : 'Add to Favorites'}</span>
+            </button>
+
             <button
               onClick={() => {
-                if (window.confirm(`Are you sure you want to remove "${book.title}" from your library?`)) {
+                if (window.confirm(`Are you sure you want to remove "${book.title}" from this view?`)) {
                   onDeleteBook(book.id);
                   onClose();
                 }
@@ -254,7 +244,7 @@ export default function BookDetailsModal({
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-error hover:bg-error/10 border border-error/30 transition-colors cursor-pointer"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span>Remove from Library</span>
+              <span>Remove from View</span>
             </button>
           </div>
 
