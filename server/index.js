@@ -20,6 +20,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+app.set('trust proxy', true);
 const PORT = process.env.PORT || 3004;
 const APP_PASSWORD = process.env.APP_PASSWORD || process.env.PASSWORD || '';
 
@@ -85,26 +86,45 @@ app.get(['/api/auth/google/url', '/books/api/auth/google/url'], requireAuth, (re
 });
 
 app.get(['/api/auth/google/callback', '/books/api/auth/google/callback'], async (req, res) => {
-  const { code, error } = req.query;
+  const { code, error, state } = req.query;
+  const isSubpath = req.path.startsWith('/books');
+  const returnBase = isSubpath ? '/books/' : '/';
+
   if (error) {
-    return res.status(400).send(`Google OAuth error: ${error}`);
+    console.error(`[Pure-Books] Google OAuth error from provider: ${error}`);
+    return res.redirect(`${returnBase}?auth_error=${encodeURIComponent(error)}`);
   }
   if (!code) {
-    return res.status(400).send('Missing authorization code');
+    return res.redirect(`${returnBase}?auth_error=${encodeURIComponent('Missing authorization code')}`);
   }
 
   try {
-    const host = req.get('host');
-    const protocol = req.protocol;
-    const isSubpath = req.path.startsWith('/books');
-    const redirectUri = `${protocol}://${host}${isSubpath ? '/books' : ''}/api/auth/google/callback`;
+    let redirectUri = '';
+    if (state) {
+      try {
+        const parsedState = JSON.parse(Buffer.from(state, 'base64url').toString('utf8'));
+        if (parsedState.redirectUri) {
+          redirectUri = parsedState.redirectUri.trim();
+        }
+      } catch (err) {
+        console.warn('[Pure-Books] Could not parse OAuth state parameter:', err.message);
+      }
+    }
 
+    // Fallback if state is missing
+    if (!redirectUri) {
+      const proto = req.get('x-forwarded-proto') || req.protocol;
+      const host = req.get('x-forwarded-host') || req.get('host');
+      redirectUri = `${proto}://${host}${isSubpath ? '/books' : ''}/api/auth/google/callback`;
+    }
+
+    console.log(`[Pure-Books] Exchanging code with redirectUri: "${redirectUri}"`);
     await googleBooks.exchangeCode(code, redirectUri);
     // Redirect back to the web UI
-    res.redirect(isSubpath ? '/books/?auth=success' : '/?auth=success');
+    res.redirect(`${returnBase}?auth=success`);
   } catch (err) {
     console.error('[Pure-Books] OAuth callback error:', err);
-    res.status(500).send(`OAuth Error: ${err.message}`);
+    res.redirect(`${returnBase}?auth_error=${encodeURIComponent(err.message)}`);
   }
 });
 

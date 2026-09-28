@@ -137,14 +137,18 @@ export default function App() {
   useEffect(() => {
     loadData();
 
-    // Check if OAuth callback succeeded
+    // Check if OAuth callback succeeded or failed
     const params = new URLSearchParams(window.location.search);
     if (params.get('auth') === 'success') {
-      // Clean query params
       const cleanUrl = window.location.pathname;
       window.history.replaceState({}, document.title, cleanUrl);
-      // Trigger sync
       handleSync();
+    }
+    const authError = params.get('auth_error');
+    if (authError) {
+      const cleanUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
+      alert(`Google OAuth Error: ${decodeURIComponent(authError)}`);
     }
   }, [loadData]);
 
@@ -190,15 +194,19 @@ export default function App() {
   // Connect Google Account via OAuth
   const handleConnectGoogle = async () => {
     try {
-      const host = window.location.host;
-      const protocol = window.location.protocol;
       const isSubpath = window.location.pathname.startsWith('/books');
-      const redirectUri = `${protocol}//${host}${isSubpath ? '/books' : ''}/api/auth/google/callback`;
+      const origin = window.location.origin;
+      const redirectUri = `${origin}${isSubpath ? '/books' : ''}/api/auth/google/callback`;
 
       const res = await apiFetch(`/auth/google/url?redirectUri=${encodeURIComponent(redirectUri)}`);
       if (res.ok) {
         const { url } = await res.json();
-        window.location.href = url;
+        // Break out of iframe if embedded in Pure Hub so Google doesn't block the OAuth prompt
+        if (window.top && window.top !== window.self) {
+          window.top.location.href = url;
+        } else {
+          window.location.href = url;
+        }
       } else {
         const err = await res.json();
         alert('Could not start Google login: ' + (err.error || 'Missing Client ID in settings'));

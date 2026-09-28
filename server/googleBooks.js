@@ -70,20 +70,26 @@ class GoogleBooksService {
     if (!this.clientId) {
       throw new Error('Google Client ID is not configured');
     }
-    const redirect = customRedirect || this.redirectUri;
+    const redirect = (customRedirect || this.redirectUri).trim();
     const scope = encodeURIComponent('https://www.googleapis.com/auth/books https://www.googleapis.com/auth/userinfo.profile');
-    return `https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=${encodeURIComponent(this.clientId)}&redirect_uri=${encodeURIComponent(redirect)}&scope=${scope}&access_type=offline&prompt=consent`;
+    const statePayload = JSON.stringify({
+      redirectUri: redirect,
+      t: Date.now()
+    });
+    const state = Buffer.from(statePayload).toString('base64url');
+    return `https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=${encodeURIComponent(this.clientId)}&redirect_uri=${encodeURIComponent(redirect)}&scope=${scope}&access_type=offline&prompt=consent&state=${encodeURIComponent(state)}`;
   }
 
   async exchangeCode(code, customRedirect) {
-    const redirect = customRedirect || this.redirectUri;
+    const redirect = (customRedirect || this.redirectUri).trim();
+    console.log(`[Pure-Books] Requesting token exchange with redirect_uri: "${redirect}"`);
     const response = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
-        code,
-        client_id: this.clientId,
-        client_secret: this.clientSecret,
+        code: code.trim(),
+        client_id: this.clientId.trim(),
+        client_secret: this.clientSecret.trim(),
         redirect_uri: redirect,
         grant_type: 'authorization_code'
       })
@@ -91,7 +97,14 @@ class GoogleBooksService {
 
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.error_description || data.error || 'Failed to exchange authorization code');
+      console.error('[Pure-Books] Google token exchange rejected:', {
+        status: response.status,
+        redirect_uri: redirect,
+        error: data.error,
+        error_description: data.error_description
+      });
+      const desc = data.error_description || data.error || 'Failed to exchange authorization code';
+      throw new Error(`${desc}${data.error ? ` [${data.error}]` : ''}`);
     }
 
     this.accessToken = data.access_token;

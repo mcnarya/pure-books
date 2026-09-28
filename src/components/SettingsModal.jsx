@@ -260,10 +260,37 @@ export default function SettingsModal({
                 <div className="font-semibold text-on-surface text-sm">
                   Custom OAuth 2.0 Credentials
                 </div>
-                <p className="text-on-surface-variant text-[11px]">
-                  To enable seamless 1-click Google OAuth login, configure your credentials from the Google Cloud Console.
-                  Add <code>{googleStatus?.redirectUri}</code> as an Authorized Redirect URI.
+                <p className="text-on-surface-variant text-[11px] leading-relaxed">
+                  To enable 1-click Google OAuth login, configure an OAuth 2.0 Web Client ID in Google Cloud Console. Under <strong>Authorized redirect URIs</strong>, add both of these URIs:
                 </p>
+                <div className="space-y-1.5 font-mono text-[10px]">
+                  <div className="flex items-center justify-between p-2 rounded bg-surface-container border border-outline/50">
+                    <span className="truncate select-all">{typeof window !== 'undefined' ? `${window.location.origin}/books/api/auth/google/callback` : ''}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(`${window.location.origin}/books/api/auth/google/callback`);
+                        setStatusMessage('Copied Pure Hub redirect URI!');
+                      }}
+                      className="ml-2 px-2 py-0.5 rounded bg-surface-container-high text-on-surface text-[10px] font-sans hover:bg-surface-container cursor-pointer shrink-0"
+                    >
+                      Copy (Hub)
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between p-2 rounded bg-surface-container border border-outline/50">
+                    <span className="truncate select-all">{typeof window !== 'undefined' ? `${window.location.origin}/api/auth/google/callback` : ''}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(`${window.location.origin}/api/auth/google/callback`);
+                        setStatusMessage('Copied Direct redirect URI!');
+                      }}
+                      className="ml-2 px-2 py-0.5 rounded bg-surface-container-high text-on-surface text-[10px] font-sans hover:bg-surface-container cursor-pointer shrink-0"
+                    >
+                      Copy (Direct)
+                    </button>
+                  </div>
+                </div>
                 <form onSubmit={handleSaveCredentials} className="space-y-2.5">
                   <div>
                     <label className="text-on-surface block mb-1">Client ID</label>
