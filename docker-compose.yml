@@ -1,0 +1,18 @@
+services:
+  pure-books:
+    build: .
+    container_name: pure-books
+    restart: unless-stopped
+    ports:
+      - "3004:3004"
+    environment:
+      - PORT=3004
+      - APP_PASSWORD=${APP_PASSWORD:-}
+      - DATA_PATH=/data/library.json
+      - AUTH_DATA_PATH=/data/auth.json
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI:-http://localhost:3004/api/auth/google/callback}
+    volumes:
+      - ./data:/data
