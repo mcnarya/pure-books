@@ -34,7 +34,7 @@ export default function ShelfNav({
 
   return (
     <div className="border-b border-outline bg-surface/40 backdrop-blur-xs">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6">
+      <div className="w-full px-4 sm:px-6">
         
         {/* Navigation Tabs */}
         <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto py-2.5 no-scrollbar">

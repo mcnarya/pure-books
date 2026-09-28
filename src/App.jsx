@@ -412,7 +412,7 @@ export default function App() {
   }, [books, activeShelf, searchQuery]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-surface text-on-surface antialiased transition-colors duration-200">
+    <div className="h-screen w-full flex flex-col bg-surface text-on-surface antialiased transition-colors duration-200 overflow-hidden">
       
       {/* Top Header */}
       <Header
@@ -437,7 +437,7 @@ export default function App() {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6">
+      <main className="flex-1 w-full overflow-y-auto px-4 sm:px-6 md:px-8 py-6">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-24 text-on-surface-variant">
             <Loader2 className="w-8 h-8 animate-spin text-primary mb-3" />
@@ -447,7 +447,7 @@ export default function App() {
           <div
             className={
               viewMode === 'grid'
-                ? "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-5"
+                ? "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4 sm:gap-5"
                 : "flex flex-col gap-3"
             }
           >
