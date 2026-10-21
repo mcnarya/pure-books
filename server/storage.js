@@ -2,7 +2,20 @@ import fs from 'fs';
 import fsPromises from 'fs/promises';
 import path from 'path';
 
-const DATA_PATH = process.env.DATA_PATH || path.join(process.cwd(), 'data', 'library.json');
+export function getBooksFilePath() {
+  if (process.env.BOOKS_DATA_PATH) {
+    return process.env.BOOKS_DATA_PATH;
+  }
+  if (process.env.DATA_PATH) {
+    if (path.basename(process.env.DATA_PATH) !== 'articles.json') {
+      return process.env.DATA_PATH;
+    }
+    return path.join(path.dirname(process.env.DATA_PATH), 'library.json');
+  }
+  return path.join(process.cwd(), 'data', 'library.json');
+}
+
+const DATA_PATH = getBooksFilePath();
 
 // Known legacy seed book IDs to strip out so library contains ONLY genuine Google Books
 const LEGACY_SEED_IDS = new Set([

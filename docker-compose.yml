@@ -9,6 +9,8 @@ services:
       - PORT=3004
       - APP_PASSWORD=${APP_PASSWORD:-}
       - DATA_PATH=/data/library.json
+      - ARTICLES_DATA_PATH=/data/articles.json
+      - NOTES_DATA_DIR=/data
       - AUTH_DATA_PATH=/data/auth.json
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}

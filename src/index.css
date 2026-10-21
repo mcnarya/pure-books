@@ -242,6 +242,29 @@ body {
   color: var(--md-sys-color-primary);
 }
 
+.prose-reader a:hover {
+  opacity: 0.85;
+}
+
+.prose-reader img {
+  border-radius: 8px;
+  margin: 1.8em auto;
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+.prose-reader figure {
+  margin: 2em 0;
+}
+
+.prose-reader figcaption {
+  font-size: 0.85em;
+  text-align: center;
+  opacity: 0.7;
+  margin-top: 0.5em;
+}
+
 .prose-reader blockquote {
   border-left: 3px solid var(--md-sys-color-primary);
   padding-left: 1.25em;
@@ -257,4 +280,39 @@ body {
   border-radius: 4px;
   background-color: var(--md-sys-color-surface-container-high);
   color: var(--md-sys-color-primary);
+}
+
+.prose-reader pre {
+  font-family: 'JetBrains Mono', monospace;
+  padding: 1em 1.25em;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 1.5em 0;
+  background-color: var(--md-sys-color-surface-container);
+  border: 1px solid var(--md-sys-color-outline);
+}
+
+.prose-reader pre code {
+  padding: 0;
+  background-color: transparent;
+}
+
+.prose-reader ul,
+.prose-reader ol {
+  padding-left: 1.5em;
+  margin: 1.25em 0;
+}
+
+.prose-reader ul { list-style-type: disc; }
+.prose-reader ol { list-style-type: decimal; }
+
+.prose-reader li {
+  margin-top: 0.4em;
+  margin-bottom: 0.4em;
+}
+
+.prose-reader hr {
+  border: 0;
+  border-top: 1px solid var(--md-sys-color-outline);
+  margin: 2.5em 0;
 }
