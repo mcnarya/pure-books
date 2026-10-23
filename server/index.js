@@ -12,6 +12,7 @@ import {
   readLibrary,
   writeLibrary,
   addBook,
+  addBooksBatch,
   updateBook,
   deleteBook,
   DEFAULT_BOOKSHELVES,
@@ -20,6 +21,7 @@ import {
 import {
   readArticles,
   writeArticles,
+  getArticleById,
   addArticle,
   updateArticle,
   deleteArticle,
@@ -278,7 +280,7 @@ app.post(['/api/sync', '/books/api/sync'], requireAuth, async (req, res) => {
   try {
     const remoteShelvesRes = await googleBooks.listBookshelves();
     const remoteShelves = remoteShelvesRes?.items || [];
-    let importedCount = 0;
+    const batchItems = [];
 
     for (const shelf of remoteShelves) {
       if (shelf.volumeCount > 0) {
@@ -295,7 +297,7 @@ app.post(['/api/sync', '/books/api/sync'], requireAuth, async (req, res) => {
               const shelfMapping = DEFAULT_BOOKSHELVES.find(s => s.id === String(shelf.id));
               const shelfSlug = shelfMapping ? shelfMapping.slug : 'purchased';
 
-              const bookData = {
+              batchItems.push({
                 id: item.id,
                 title: vi.title || 'Untitled',
                 subtitle: vi.subtitle || '',
@@ -315,10 +317,7 @@ app.post(['/api/sync', '/books/api/sync'], requireAuth, async (req, res) => {
                 webReaderLink: item.accessInfo?.webReaderLink || `https://play.google.com/books/reader?id=${item.id}`,
                 canonicalVolumeLink: vi.canonicalVolumeLink || `https://play.google.com/store/books/details?id=${item.id}`,
                 accessInfo: item.accessInfo || {}
-              };
-
-              await addBook(bookData);
-              importedCount++;
+              });
             }
 
             startIndex += items.length;
@@ -332,10 +331,14 @@ app.post(['/api/sync', '/books/api/sync'], requireAuth, async (req, res) => {
       }
     }
 
+    if (batchItems.length > 0) {
+      await addBooksBatch(batchItems);
+    }
+
     const updatedLibrary = await readLibrary();
     res.json({
       success: true,
-      syncedVolumes: importedCount,
+      syncedVolumes: batchItems.length,
       totalVolumes: updatedLibrary.length
     });
   } catch (err) {
@@ -470,6 +473,43 @@ app.post(['/api/volumes/:id/readingPosition', '/books/api/volumes/:id/readingPos
 // ----------------------------------------------------
 // Book Library CRUD Endpoints
 // ----------------------------------------------------
+app.get(['/api/current', '/books/api/current'], async (req, res) => {
+  try {
+    const books = await readLibrary();
+    const readingNow =
+      books.find(b => b.shelf === 'reading-now' || b.shelfId === '3' || (Array.isArray(b.shelves) && b.shelves.some(s => s.slug === 'reading-now' || s.id === '3'))) ||
+      books.find(b => (b.progress || 0) > 0 && (b.progress || 0) < 100) ||
+      books[0];
+
+    if (!readingNow) {
+      return res.json({
+        title: 'Designing Data-Intensive Applications',
+        author: 'Martin Kleppmann',
+        progress: 68,
+        pagesRead: 412,
+        totalPages: 616,
+        goalDaysStreak: 14
+      });
+    }
+
+    const totalPages = readingNow.pageCount || 320;
+    const progress = readingNow.progress || 35;
+    const pagesRead = readingNow.currentPage || Math.round((progress / 100) * totalPages);
+
+    res.json({
+      id: readingNow.id,
+      title: readingNow.title,
+      author: Array.isArray(readingNow.authors) ? readingNow.authors.join(', ') : 'Unknown Author',
+      progress,
+      pagesRead,
+      totalPages,
+      goalDaysStreak: 14
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to retrieve current book' });
+  }
+});
+
 app.get(['/api/library', '/books/api/library'], requireAuth, async (req, res) => {
   try {
     const books = await readLibrary();
@@ -703,6 +743,20 @@ app.post(['/api/articles/upload', '/books/api/articles/upload', '/read/api/artic
   }
 });
 
+// Get Single Article (with full content & markdown)
+app.get(['/api/articles/:id', '/books/api/articles/:id', '/read/api/articles/:id'], requireAuth, async (req, res) => {
+  try {
+    const article = await getArticleById(req.params.id);
+    if (!article) {
+      return res.status(404).json({ error: 'Article not found' });
+    }
+    res.json(article);
+  } catch (err) {
+    console.error('Failed to get article:', err);
+    res.status(500).json({ error: 'Failed to retrieve article' });
+  }
+});
+
 // Update Article
 app.patch(['/api/articles/:id', '/books/api/articles/:id', '/read/api/articles/:id'], requireAuth, async (req, res) => {
   const { id } = req.params;
@@ -914,16 +968,13 @@ app.post(['/api/import', '/books/api/import', '/api/import/books'], requireAuth,
       return res.status(400).json({ error: 'Invalid format: expected array of books' });
     }
 
-    let count = 0;
-    for (const b of books) {
-      if (b.title) {
-        await addBook(b);
-        count++;
-      }
+    const validBooks = books.filter(b => b && b.title);
+    if (validBooks.length > 0) {
+      await addBooksBatch(validBooks);
     }
 
     const library = await readLibrary();
-    res.json({ success: true, imported: count, total: library.length });
+    res.json({ success: true, imported: validBooks.length, total: library.length });
   } catch (err) {
     res.status(500).json({ error: 'Import failed: ' + err.message });
   }
@@ -1092,6 +1143,9 @@ if (fs.existsSync(distPath)) {
   app.use('/books', express.static(distPath));
   app.use('/read', express.static(distPath));
   app.use('/note', express.static(distPath));
+  app.use('/books-assets', express.static(path.join(distPath, 'books-assets')));
+  app.use('/read-assets', express.static(path.join(distPath, 'books-assets')));
+  app.use('/note-assets', express.static(path.join(distPath, 'books-assets')));
 
   app.get('*', (req, res) => {
     res.sendFile(path.join(distPath, 'index.html'));

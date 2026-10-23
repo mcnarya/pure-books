@@ -16,7 +16,13 @@ import { BookOpen, Library, Plus, Loader2, RefreshCw, AlertCircle, Sparkles, Inb
 
 export default function App() {
   // Navigation Section ('books' | 'articles' | 'notes')
-  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('pure_books_active_tab') || 'books');
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window !== 'undefined') {
+      if (window.location.pathname.startsWith('/read')) return 'articles';
+      if (window.location.pathname.startsWith('/note')) return 'notes';
+    }
+    return localStorage.getItem('pure_books_active_tab') || 'books';
+  });
 
   // Books State
   const [books, setBooks] = useState([]);
@@ -58,7 +64,9 @@ export default function App() {
   // Auth State
   const [authRequired, setAuthRequired] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
-  const [passwordToken, setPasswordToken] = useState(() => sessionStorage.getItem('pure_books_token') || '');
+  const [passwordToken, setPasswordToken] = useState(
+    () => sessionStorage.getItem('pure_books_token') || localStorage.getItem('pure_suite_token') || ''
+  );
 
   // API Base Path Resolver
   const apiBase = typeof window !== 'undefined' && window.location.pathname.startsWith('/books')
@@ -78,29 +86,6 @@ export default function App() {
     document.documentElement.className = theme;
     localStorage.setItem('pure_books_theme', theme);
   }, [theme]);
-
-  // PostMessage listener for Pure Hub Theme Synchronization
-  useEffect(() => {
-    const handleMessage = (event) => {
-      if (event.data?.type === 'PURE_HUB_THEME_CHANGE' && typeof event.data.theme === 'string') {
-        setTheme(event.data.theme);
-      }
-      if (event.data?.type === 'PURE_HUB_DYNAMIC_THEME_OVERRIDE') {
-        const { primary, primaryContainer } = event.data;
-        if (primary && primaryContainer) {
-          document.documentElement.style.setProperty('--md-sys-color-primary', primary);
-          document.documentElement.style.setProperty('--md-sys-color-primary-container', primaryContainer);
-        }
-      }
-      if (event.data?.type === 'PURE_HUB_DYNAMIC_THEME_RESET') {
-        document.documentElement.style.removeProperty('--md-sys-color-primary');
-        document.documentElement.style.removeProperty('--md-sys-color-primary-container');
-      }
-    };
-
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, []);
 
   // Save View Mode
   useEffect(() => {
@@ -156,10 +141,10 @@ export default function App() {
     }
   }, [apiFetch, passwordToken]);
 
-  // Load Articles Data
+  // Load Articles Data (summaries for fast list rendering)
   const loadArticlesData = useCallback(async () => {
     try {
-      const res = await apiFetch('/articles');
+      const res = await apiFetch('/articles?summary=true');
       if (res.ok) {
         const data = await res.json();
         setArticles(data);
@@ -167,6 +152,25 @@ export default function App() {
     } catch (err) {
       console.error('[pure-books] Failed to load articles data:', err);
     }
+  }, [apiFetch]);
+
+  const handleOpenArticleReader = useCallback(async (item) => {
+    if (!item) return;
+    if (item.content !== undefined) {
+      setActiveArticle(item);
+      return;
+    }
+    try {
+      const res = await apiFetch(`/articles/${item.id}`);
+      if (res.ok) {
+        const full = await res.json();
+        setActiveArticle(full);
+        return;
+      }
+    } catch (err) {
+      console.error('[pure-books] Failed to load full article:', err);
+    }
+    setActiveArticle(item);
   }, [apiFetch]);
 
   // Load Notes Data
@@ -230,6 +234,10 @@ export default function App() {
       if (res.ok) {
         setPasswordToken(password);
         sessionStorage.setItem('pure_books_token', password);
+        localStorage.setItem('pure_suite_token', password);
+        try {
+          window.parent?.postMessage({ type: 'PURE_HUB_AUTH_TOKEN', token: password }, '*');
+        } catch {}
         setAuthenticated(true);
         loadAllData();
         return { success: true };
@@ -478,7 +486,7 @@ export default function App() {
   };
 
   // Notes CRUD Handlers
-  const handleSelectNote = async (id) => {
+  const handleSelectNote = useCallback(async (id) => {
     try {
       setIsScratchpad(false);
       const res = await apiFetch(`/notes/${id}`);
@@ -488,7 +496,54 @@ export default function App() {
     } catch (err) {
       console.error('Failed to select note:', err);
     }
-  };
+  }, [apiFetch]);
+
+  // PostMessage listener for Pure Hub Theme Synchronization & Spotlight Deep-Links
+  useEffect(() => {
+    const handleMessage = (event) => {
+      if (event.data?.type === 'PURE_HUB_THEME_CHANGE' && typeof event.data.theme === 'string') {
+        setTheme(event.data.theme);
+      }
+      if (event.data?.type === 'PURE_HUB_DYNAMIC_THEME_OVERRIDE') {
+        const { primary, primaryContainer } = event.data;
+        if (primary && primaryContainer) {
+          document.documentElement.style.setProperty('--md-sys-color-primary', primary);
+          document.documentElement.style.setProperty('--md-sys-color-primary-container', primaryContainer);
+        }
+      }
+      if (event.data?.type === 'PURE_HUB_DYNAMIC_THEME_RESET') {
+        document.documentElement.style.removeProperty('--md-sys-color-primary');
+        document.documentElement.style.removeProperty('--md-sys-color-primary-container');
+      }
+      if (event.data?.type === 'PURE_HUB_AUTH_TOKEN' && typeof event.data.token === 'string' && event.data.token) {
+        setPasswordToken(event.data.token);
+        sessionStorage.setItem('pure_books_token', event.data.token);
+        localStorage.setItem('pure_suite_token', event.data.token);
+        setAuthenticated(true);
+      }
+      if (event.data?.type === 'OPEN_BOOK' && event.data.id) {
+        setActiveTab('books');
+        setActiveArticle(null);
+        setBooks((currentBooks) => {
+          const match = currentBooks.find((b) => String(b.id) === String(event.data.id));
+          if (match) setDetailsBook(match);
+          return currentBooks;
+        });
+      }
+      if (event.data?.type === 'OPEN_ARTICLE' && event.data.id) {
+        setActiveTab('articles');
+        handleOpenArticleReader({ id: event.data.id });
+      }
+      if (event.data?.type === 'OPEN_NOTE' && event.data.id) {
+        setActiveTab('notes');
+        setActiveArticle(null);
+        handleSelectNote(event.data.id);
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [handleOpenArticleReader, handleSelectNote]);
 
   const handleSelectScratchpad = () => {
     setIsScratchpad(true);
@@ -890,7 +945,7 @@ export default function App() {
                 <ArticleCard
                   key={article.id}
                   article={article}
-                  onOpenReader={(item) => setActiveArticle(item)}
+                  onOpenReader={handleOpenArticleReader}
                   onToggleRead={handleToggleArticleRead}
                   onToggleStar={handleToggleArticleStar}
                   onDelete={handleDeleteArticle}

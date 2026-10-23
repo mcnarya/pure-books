@@ -19,29 +19,46 @@ async function ensureDirectory(filePath) {
   await fs.mkdir(dir, { recursive: true });
 }
 
+let memoryArticles = null;
+
 export async function readArticles() {
+  if (memoryArticles !== null) {
+    return memoryArticles;
+  }
   const file = getArticlesFilePath();
   try {
     await ensureDirectory(file);
     const data = await fs.readFile(file, 'utf-8');
-    if (!data.trim()) return [];
-    return JSON.parse(data);
+    if (!data.trim()) {
+      memoryArticles = [];
+      return memoryArticles;
+    }
+    memoryArticles = JSON.parse(data);
+    return memoryArticles;
   } catch (err) {
     if (err.code === 'ENOENT') {
-      return [];
+      memoryArticles = [];
+      return memoryArticles;
     }
     console.error('Error reading articles:', err);
-    return [];
+    memoryArticles = [];
+    return memoryArticles;
   }
 }
 
 export async function writeArticles(articles) {
+  memoryArticles = articles;
   const file = getArticlesFilePath();
   await ensureDirectory(file);
-  const tempFile = `${file}.tmp.${Date.now()}`;
+  const tempFile = `${file}.tmp.${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const payload = JSON.stringify(articles, null, 2);
   await fs.writeFile(tempFile, payload, 'utf-8');
   await fs.rename(tempFile, file);
+}
+
+export async function getArticleById(id) {
+  const articles = await readArticles();
+  return articles.find(a => a.id === id) || null;
 }
 
 export async function addArticle(article) {
