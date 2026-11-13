@@ -32,7 +32,9 @@ const THEMES = [
   { id: 'theme-oled', name: 'OLED Black', color: '#000000', accent: '#3b82f6' },
   { id: 'theme-dracula', name: 'Dracula', color: '#282a36', accent: '#ff79c6' },
   { id: 'theme-sunset', name: 'Sunset Purple', color: '#1a1528', accent: '#f97316' },
-  { id: 'theme-solarized', name: 'Solarized Dark', color: '#00212b', accent: '#268bd2' }
+  { id: 'theme-solarized', name: 'Solarized Dark', color: '#00212b', accent: '#268bd2' },
+  { id: 'theme-eink-light', name: 'E-Ink Light', color: '#ffffff', accent: '#000000' },
+  { id: 'theme-eink-dark', name: 'E-Ink Dark', color: '#000000', accent: '#ffffff' }
 ];
 
 export default function SettingsModal({
